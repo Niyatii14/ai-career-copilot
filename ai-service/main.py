@@ -1,5 +1,5 @@
 import os
-
+from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
@@ -46,19 +46,18 @@ def home():
     }
 
 
-@app.post("/analyze-career")
-def analyze_career(request: CareerAnalysisRequest):
-
-    prompt = prompt = f"""
+career_prompt = PromptTemplate(
+    input_variables=["resume", "job_description"],
+    template="""
 You are an AI Career Copilot.
 
 Analyze the candidate's resume against the job description.
 
 RESUME:
-{request.resume}
+{resume}
 
 JOB DESCRIPTION:
-{request.job_description}
+{job_description}
 
 Provide a useful analysis covering:
 
@@ -70,6 +69,14 @@ Provide a useful analysis covering:
 Keep the analysis practical and specific to the provided resume
 and job description.
 """
+)
+@app.post("/analyze-career")
+def analyze_career(request: CareerAnalysisRequest):
+
+    prompt = career_prompt.format(
+        resume=request.resume,
+        job_description=request.job_description
+    )
 
     response = client.models.generate_content(
         model="gemini-3.6-flash",
@@ -80,6 +87,4 @@ and job description.
         },
     )
 
-    return {
-        "analysis": response.parsed
-    }
+    return response.parsed
