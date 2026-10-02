@@ -1,7 +1,11 @@
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
+const mongoose = require("mongoose");
 
+require("dotenv").config();
+
+const CareerAnalysis = require("./models/CareerAnalysis");
 const app = express();
 
 app.use(cors());
@@ -27,7 +31,15 @@ app.post("/api/analyze-career", async (req, res) => {
             }
         );
 
-        res.json(response.data);
+        const analysis = response.data;
+
+        const savedAnalysis = await CareerAnalysis.create({
+            resume,
+            job_description,
+            ...analysis
+        });
+
+res.json(savedAnalysis);
 
     } catch (error) {
         console.error("AI Service Error:", error.message);
@@ -43,6 +55,14 @@ app.post("/api/analyze-career", async (req, res) => {
         });
     }
 });
+
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => {
+        console.log("MongoDB connected successfully");
+    })
+    .catch((error) => {
+        console.error("MongoDB connection failed:", error.message);
+    });
 
 
 app.listen(PORT, () => {
