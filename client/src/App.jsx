@@ -1,14 +1,22 @@
 import { useState } from "react";
+import "./App.css";
 
 function App() {
   const [resume, setResume] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const analyzeCareer = async () => {
+    if (!resume.trim() || !jobDescription.trim()) {
+      setError("Please enter both your resume and job description.");
+      return;
+    }
+
     try {
       setLoading(true);
+      setError("");
       setResult(null);
 
       const response = await fetch(
@@ -25,41 +33,125 @@ function App() {
         }
       );
 
+      if (!response.ok) {
+        throw new Error("Failed to analyze career");
+      }
+
       const data = await response.json();
 
       setResult(data);
     } catch (error) {
-      console.error("Error:", error);
+      console.error(error);
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div>
-      <h1>AI Career Copilot</h1>
+    <div className="app">
+      <header className="hero">
+        <h1>AI Career Copilot</h1>
 
-      <textarea
-        placeholder="Paste your resume here..."
-        value={resume}
-        onChange={(e) => setResume(e.target.value)}
-      />
+        <p>
+          Analyze your resume against a job description
+          and discover how to improve your chances.
+        </p>
+      </header>
 
-      <textarea
-        placeholder="Paste the job description here..."
-        value={jobDescription}
-        onChange={(e) => setJobDescription(e.target.value)}
-      />
+      <main className="container">
 
-      <button onClick={analyzeCareer}>
-        {loading ? "Analyzing..." : "Analyze Career"}
-      </button>
+        <section className="input-section">
 
-      {result && (
-        <pre>
-          {JSON.stringify(result, null, 2)}
-        </pre>
-      )}
+          <div className="input-card">
+            <h2>Your Resume</h2>
+
+            <textarea
+              placeholder="Paste your resume here..."
+              value={resume}
+              onChange={(e) => setResume(e.target.value)}
+            />
+          </div>
+
+          <div className="input-card">
+            <h2>Job Description</h2>
+
+            <textarea
+              placeholder="Paste the job description here..."
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+            />
+          </div>
+
+        </section>
+
+        <button
+          className="analyze-button"
+          onClick={analyzeCareer}
+          disabled={loading}
+        >
+          {loading ? "Analyzing..." : "Analyze Career"}
+        </button>
+
+        {error && (
+          <p className="error">
+            {error}
+          </p>
+        )}
+
+        {result && (
+          <section className="results">
+
+            <h2>Career Analysis</h2>
+
+            <div className="result-card">
+              <h3>✓ Matching Skills</h3>
+
+              <ul>
+                {result.matching_skills?.map((skill, index) => (
+                  <li key={index}>{skill}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="result-card">
+              <h3>⚠ Missing Skills</h3>
+
+              <ul>
+                {result.missing_skills?.map((skill, index) => (
+                  <li key={index}>{skill}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="result-card">
+              <h3>📝 Resume Improvements</h3>
+
+              <ul>
+                {result.resume_improvements?.map(
+                  (improvement, index) => (
+                    <li key={index}>{improvement}</li>
+                  )
+                )}
+              </ul>
+            </div>
+
+            <div className="result-card">
+              <h3>🎯 Interview Questions</h3>
+
+              <ul>
+                {result.interview_questions?.map(
+                  (question, index) => (
+                    <li key={index}>{question}</li>
+                  )
+                )}
+              </ul>
+            </div>
+
+          </section>
+        )}
+
+      </main>
     </div>
   );
 }
