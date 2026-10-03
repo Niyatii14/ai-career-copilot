@@ -9,12 +9,19 @@ function App() {
   const [error, setError] = useState("");
 
   const resumeWords = resume.trim()
-  ? resume.trim().split(/\s+/).length
-  : 0;
+    ? resume.trim().split(/\s+/).length
+    : 0;
 
   const jobDescriptionWords = jobDescription.trim()
-  ? jobDescription.trim().split(/\s+/).length
-  : 0;
+    ? jobDescription.trim().split(/\s+/).length
+    : 0;
+
+  const clearAnalysis = () => {
+    setResume("");
+    setJobDescription("");
+    setResult(null);
+    setError("");
+  };
 
   const analyzeCareer = async () => {
     if (!resume.trim() || !jobDescription.trim()) {
@@ -101,13 +108,23 @@ function App() {
 
         </section>
 
-        <button
-          className="analyze-button"
-          onClick={analyzeCareer}
-          disabled={loading}
-        >
-          {loading ? "Analyzing..." : "Analyze Career"}
-        </button>
+        <div className="button-group">
+  <button
+    className="analyze-button"
+    onClick={analyzeCareer}
+    disabled={loading}
+  >
+    {loading ? "Analyzing..." : "Analyze Career"}
+  </button>
+
+  <button
+    className="clear-button"
+    onClick={clearAnalysis}
+    disabled={loading}
+  >
+    Clear
+  </button>
+</div>
 
         {error && (
           <p className="error">
