@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field
 from google import genai
 
 class CareerAnalysis(BaseModel):
+    match_score: int = Field(
+        description="Overall percentage match between the resume and job description, from 0 to 100."
+    )
+
     matching_skills: list[str] = Field(
         description="Skills from the resume that match the job description."
     )
@@ -68,6 +72,10 @@ Provide a useful analysis covering:
 
 Keep the analysis practical and specific to the provided resume
 and job description.
+
+Also calculate an overall match score from 0 to 100 based on how well the candidate's skills and experience align with the job description.
+
+Return the score as an integer.
 """
 )
 @app.post("/analyze-career")

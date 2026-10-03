@@ -11,6 +11,10 @@ const careerAnalysisSchema = new mongoose.Schema(
             type: String,
             required: true
         },
+        match_score: {
+            type: Number,
+            required: true
+        },
 
         matching_skills: {
             type: [String],

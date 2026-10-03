@@ -136,6 +136,19 @@ function App() {
           <section className="results">
 
             <h2>Career Analysis</h2>
+            <div className="score-card">
+  <div>
+    <p className="score-label">Resume Match Score</p>
+    <h3>{result.match_score}%</h3>
+  </div>
+
+  <div className="score-bar">
+    <div
+      className="score-progress"
+      style={{ width: `${result.match_score}%` }}
+    ></div>
+  </div>
+</div>
 
             <div className="result-card">
               <h3>✓ Matching Skills</h3>
