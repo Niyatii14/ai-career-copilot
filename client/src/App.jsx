@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 function App() {
@@ -7,6 +7,8 @@ function App() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
 
   const resumeWords = resume.trim()
     ? resume.trim().split(/\s+/).length
@@ -22,6 +24,30 @@ function App() {
     setResult(null);
     setError("");
   };
+  const fetchHistory = async () => {
+    try {
+      setHistoryLoading(true);
+
+      const response = await fetch(
+        "http://localhost:5000/api/analyses"
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch analysis history");
+      }
+
+      const data = await response.json();
+
+      setHistory(data);
+    } catch (error) {
+      console.error("History error:", error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   const analyzeCareer = async () => {
     if (!resume.trim() || !jobDescription.trim()) {
@@ -55,6 +81,7 @@ function App() {
       const data = await response.json();
 
       setResult(data);
+      fetchHistory();
     } catch (error) {
       console.error(error);
       setError("Something went wrong. Please try again.");
@@ -196,6 +223,53 @@ function App() {
 
           </section>
         )}
+        <section className="history">
+
+  <h2>Analysis History</h2>
+
+  {historyLoading ? (
+    <p className="history-message">
+      Loading history...
+    </p>
+  ) : history.length === 0 ? (
+    <p className="history-message">
+      No previous analyses yet.
+    </p>
+  ) : (
+    <div className="history-list">
+
+      {history.map((item) => (
+        <div className="history-card" key={item._id}>
+
+          <div className="history-header">
+            <h3>
+              Career Analysis
+            </h3>
+
+            {item.match_score !== undefined && (
+              <span className="history-score">
+                {item.match_score}%
+              </span>
+            )}
+          </div>
+
+          <p className="history-date">
+            {new Date(item.createdAt).toLocaleString()}
+          </p>
+
+          <p className="history-preview">
+            {item.job_description.length > 120
+              ? `${item.job_description.substring(0, 120)}...`
+              : item.job_description}
+          </p>
+
+        </div>
+      ))}
+
+    </div>
+  )}
+
+</section>
 
       </main>
     </div>
