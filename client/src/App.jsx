@@ -8,6 +8,14 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const resumeWords = resume.trim()
+  ? resume.trim().split(/\s+/).length
+  : 0;
+
+  const jobDescriptionWords = jobDescription.trim()
+  ? jobDescription.trim().split(/\s+/).length
+  : 0;
+
   const analyzeCareer = async () => {
     if (!resume.trim() || !jobDescription.trim()) {
       setError("Please enter both your resume and job description.");
@@ -71,6 +79,9 @@ function App() {
               value={resume}
               onChange={(e) => setResume(e.target.value)}
             />
+            <p className="word-count">
+              {resumeWords} words
+            </p>
           </div>
 
           <div className="input-card">
@@ -81,6 +92,11 @@ function App() {
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
             />
+            <p className="word-count">
+              {jobDescriptionWords} words
+            </p>
+            
+
           </div>
 
         </section>
