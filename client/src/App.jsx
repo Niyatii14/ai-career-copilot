@@ -10,6 +10,8 @@ function App() {
 
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [resumeFile, setResumeFile] = useState(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
 
   const resultsRef = useRef(null);
 
@@ -75,6 +77,58 @@ function App() {
   useEffect(() => {
     fetchHistory();
   }, []);
+
+  const uploadResume = async (file) => {
+  if (!file) return;
+
+  if (file.type !== "application/pdf") {
+    setError("Please upload a PDF file.");
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    setError("PDF must be smaller than 5 MB.");
+    return;
+  }
+
+  try {
+    setUploadingResume(true);
+    setError("");
+
+    const formData = new FormData();
+
+    formData.append("resume", file);
+
+    const response = await fetch(
+      "http://localhost:5000/api/upload-resume",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Failed to upload resume."
+      );
+    }
+
+    setResumeFile(file);
+    setResume(data.text);
+
+  } catch (error) {
+    console.error("Resume upload error:", error);
+
+    setError(
+      error.message || "Failed to upload resume."
+    );
+
+  } finally {
+    setUploadingResume(false);
+  }
+};
 
 
   // Analyze career
@@ -152,22 +206,42 @@ function App() {
 
           {/* Resume */}
           <div className="input-card">
+  <h2>Your Resume</h2>
 
-            <h2>Your Resume</h2>
+  <label className="upload-label">
+    {uploadingResume
+      ? "Processing PDF..."
+      : "Upload Resume PDF"}
 
-            <textarea
-              placeholder="Paste your resume here..."
-              value={resume}
-              onChange={(e) =>
-                setResume(e.target.value)
-              }
-            />
+    <input
+      type="file"
+      accept=".pdf,application/pdf"
+      onChange={(e) =>
+        uploadResume(e.target.files[0])
+      }
+    />
+  </label>
 
-            <p className="word-count">
-              {resumeWords} words
-            </p>
+  {resumeFile && (
+    <p className="file-name">
+      📄 {resumeFile.name}
+    </p>
+  )}
 
-          </div>
+  <p className="or-text">
+    or paste your resume below
+  </p>
+
+  <textarea
+    placeholder="Paste your resume here..."
+    value={resume}
+    onChange={(e) => setResume(e.target.value)}
+  />
+
+  <p className="word-count">
+    {resumeWords} words
+  </p>
+</div>
 
 
           {/* Job Description */}

@@ -1,13 +1,30 @@
 const express = require("express");
+
 const axios = require("axios");
 const cors = require("cors");
 const mongoose = require("mongoose");
+const multer = require("multer");
+const { PDFParse } = require("pdf-parse");
 
 require("dotenv").config();
 
 const CareerAnalysis = require("./models/CareerAnalysis");
 
 const app = express();
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 5 * 1024 * 1024
+    },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === "application/pdf") {
+            cb(null, true);
+        } else {
+            cb(new Error("Only PDF files are allowed"));
+        }
+    }
+});
 
 app.use(cors());
 app.use(express.json());
@@ -94,6 +111,52 @@ mongoose.connect(process.env.MONGO_URI)
             error.message
         );
     });
+
+app.post(
+    "/api/upload-resume",
+    upload.single("resume"),
+    async (req, res) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    error: "Please upload a PDF resume."
+                });
+            }
+
+            const parser = new PDFParse({
+                data: req.file.buffer
+            });
+
+            const pdfData = await parser.getText();
+
+            const extractedText = pdfData.text.trim();
+
+            await parser.destroy();
+
+            if (!extractedText) {
+                return res.status(400).json({
+                    error: "Could not extract text from this PDF."
+                });
+            }
+
+            res.json({
+                filename: req.file.originalname,
+                text: extractedText
+            });
+
+        } catch (error) {
+            console.error(
+                "PDF extraction error:",
+                error.message
+            );
+
+            res.status(500).json({
+                error: "Failed to process PDF resume.",
+                details: error.message
+            });
+        }
+    }
+);
 
 
 // Start server

@@ -253,3 +253,37 @@ textarea:focus {
   text-align: center;
   color: #6b7280;
 }
+
+.upload-label {
+  display: block;
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 2px dashed #c7d2fe;
+  border-radius: 8px;
+  text-align: center;
+  color: #4f46e5;
+  font-weight: bold;
+  cursor: pointer;
+  background: #f8faff;
+}
+
+.upload-label:hover {
+  background: #eef2ff;
+}
+
+.upload-label input {
+  display: none;
+}
+
+.file-name {
+  margin: 8px 0;
+  color: #374151;
+  font-size: 14px;
+}
+
+.or-text {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+  margin: 12px 0;
+}
