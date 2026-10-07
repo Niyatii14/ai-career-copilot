@@ -79,33 +79,33 @@ function App() {
   }, []);
 
   const uploadResume = async (file) => {
-  if (!file) return;
+    if (!file) return;
 
-  if (file.type !== "application/pdf") {
-    setError("Please upload a PDF file.");
-    return;
-  }
+    if (file.type !== "application/pdf") {
+      setError("Please upload a PDF file.");
+      return;
+    }
 
-  if (file.size > 5 * 1024 * 1024) {
-    setError("PDF must be smaller than 5 MB.");
-    return;
-  }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("PDF must be smaller than 5 MB.");
+      return;
+    }
 
-  try {
-    setUploadingResume(true);
-    setError("");
+    try {
+      setUploadingResume(true);
+      setError("");
 
-    const formData = new FormData();
+      const formData = new FormData();
 
-    formData.append("resume", file);
+      formData.append("resume", file);
 
-    const response = await fetch(
-      "http://localhost:5000/api/upload-resume",
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
+      const response = await fetch(
+        "http://localhost:5000/api/upload-resume",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
     const data = await response.json();
 
@@ -128,6 +128,12 @@ function App() {
   } finally {
     setUploadingResume(false);
   }
+};
+
+const removeResume = () => {
+  setResumeFile(null);
+  setResume("");
+  setError("");
 };
 
 
@@ -223,10 +229,24 @@ function App() {
   </label>
 
   {resumeFile && (
-    <p className="file-name">
-      📄 {resumeFile.name}
-    </p>
-  )}
+  <div className="file-info">
+    <div>
+      <strong>📄 {resumeFile.name}</strong>
+      <p>
+        {(resumeFile.size / 1024).toFixed(1)} KB
+      </p>
+    </div>
+
+    <button
+      type="button"
+      className="remove-file"
+      onClick={removeResume}
+      disabled={uploadingResume}
+    >
+      Remove
+    </button>
+  </div>
+)}
 
   <p className="or-text">
     or paste your resume below
@@ -272,10 +292,12 @@ function App() {
           <button
             className="analyze-button"
             onClick={analyzeCareer}
-            disabled={loading}
+            disabled={loading || uploadingResume}
           >
             {loading
               ? "Analyzing..."
+              : uploadingResume
+              ? "Processing Resume..."
               : "Analyze Career"}
           </button>
 
