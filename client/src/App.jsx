@@ -302,10 +302,21 @@ function App() {
 
         {/* Error */}
         {error && (
-          <p className="error">
-            {error}
-          </p>
-        )}
+  <div className="error-container">
+    <p className="error">{error}</p>
+
+    {resume.trim() && jobDescription.trim() && (
+      <button
+        type="button"
+        className="retry-button"
+        onClick={analyzeCareer}
+        disabled={loading || uploadingResume}
+      >
+        {loading ? "Retrying..." : "Retry Analysis"}
+      </button>
+    )}
+  </div>
+)}
 
         {/* Career Analysis Results */}
         {result && (
