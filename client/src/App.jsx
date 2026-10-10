@@ -10,6 +10,7 @@ function App() {
 
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+
   const [resumeFile, setResumeFile] = useState(null);
   const [uploadingResume, setUploadingResume] = useState(false);
 
@@ -24,15 +25,14 @@ function App() {
     ? jobDescription.trim().split(/\s+/).length
     : 0;
 
-
   // Clear current analysis
   const clearAnalysis = () => {
     setResume("");
     setJobDescription("");
     setResult(null);
     setError("");
+    setResumeFile(null);
   };
-
 
   // Fetch analysis history
   const fetchHistory = async () => {
@@ -50,14 +50,12 @@ function App() {
       const data = await response.json();
 
       setHistory(data);
-
     } catch (error) {
       console.error("History error:", error);
     } finally {
       setHistoryLoading(false);
     }
   };
-
 
   // View an old analysis
   const viewAnalysis = (analysis) => {
@@ -72,12 +70,12 @@ function App() {
     }, 100);
   };
 
-
   // Load history when application starts
   useEffect(() => {
     fetchHistory();
   }, []);
 
+  // Upload resume PDF
   const uploadResume = async (file) => {
     if (!file) return;
 
@@ -96,7 +94,6 @@ function App() {
       setError("");
 
       const formData = new FormData();
-
       formData.append("resume", file);
 
       const response = await fetch(
@@ -107,35 +104,33 @@ function App() {
         }
       );
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(
-        data.error || "Failed to upload resume."
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Failed to upload resume."
+        );
+      }
+
+      setResumeFile(file);
+      setResume(data.text);
+    } catch (error) {
+      console.error("Resume upload error:", error);
+
+      setError(
+        error.message || "Failed to upload resume."
       );
+    } finally {
+      setUploadingResume(false);
     }
+  };
 
-    setResumeFile(file);
-    setResume(data.text);
-
-  } catch (error) {
-    console.error("Resume upload error:", error);
-
-    setError(
-      error.message || "Failed to upload resume."
-    );
-
-  } finally {
-    setUploadingResume(false);
-  }
-};
-
-const removeResume = () => {
-  setResumeFile(null);
-  setResume("");
-  setError("");
-};
-
+  // Remove uploaded resume
+  const removeResume = () => {
+    setResumeFile(null);
+    setResume("");
+    setError("");
+  };
 
   // Analyze career
   const analyzeCareer = async () => {
@@ -175,98 +170,92 @@ const removeResume = () => {
 
       // Refresh history after creating a new analysis
       fetchHistory();
-
     } catch (error) {
       console.error("Analysis error:", error);
 
       setError(
-        "Something went wrong. Please try again."
+        "Unable to analyze your resume right now. Please check that the backend and AI service are running, then try again."
       );
-
     } finally {
       setLoading(false);
     }
   };
 
-
   return (
     <div className="app">
-
       {/* Hero Section */}
       <header className="hero">
-
         <h1>AI Career Copilot</h1>
 
         <p>
           Analyze your resume against a job description
           and discover how to improve your chances.
         </p>
-
       </header>
 
-
       <main className="container">
-
         {/* Input Section */}
         <section className="input-section">
-
           {/* Resume */}
           <div className="input-card">
-  <h2>Your Resume</h2>
+            <h2>Your Resume</h2>
 
-  <label className="upload-label">
-    {uploadingResume
-      ? "Processing PDF..."
-      : "Upload Resume PDF"}
+            <label className="upload-label">
+              {uploadingResume
+                ? "Processing PDF..."
+                : "Upload Resume PDF"}
 
-    <input
-      type="file"
-      accept=".pdf,application/pdf"
-      onChange={(e) =>
-        uploadResume(e.target.files[0])
-      }
-    />
-  </label>
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                onChange={(e) =>
+                  uploadResume(e.target.files[0])
+                }
+              />
+            </label>
 
-  {resumeFile && (
-  <div className="file-info">
-    <div>
-      <strong>📄 {resumeFile.name}</strong>
-      <p>
-        {(resumeFile.size / 1024).toFixed(1)} KB
-      </p>
-    </div>
+            {resumeFile && (
+              <div className="file-info">
+                <div>
+                  <strong>
+                    📄 {resumeFile.name}
+                  </strong>
 
-    <button
-      type="button"
-      className="remove-file"
-      onClick={removeResume}
-      disabled={uploadingResume}
-    >
-      Remove
-    </button>
-  </div>
-)}
+                  <p>
+                    {(resumeFile.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
 
-  <p className="or-text">
-    or paste your resume below
-  </p>
+                <button
+                  type="button"
+                  className="remove-file"
+                  onClick={removeResume}
+                  disabled={uploadingResume}
+                >
+                  Remove
+                </button>
+              </div>
+            )}
 
-  <textarea
-    placeholder="Paste your resume here..."
-    value={resume}
-    onChange={(e) => setResume(e.target.value)}
-  />
+            <p className="or-text">
+              or paste your resume below
+            </p>
 
-  <p className="word-count">
-    {resumeWords} words
-  </p>
-</div>
+            <textarea
+              placeholder="Paste your resume here..."
+              value={resume}
+              onChange={(e) =>
+                setResume(e.target.value)
+              }
+            />
 
+            <p className="word-count">
+              {resumeWords} words
+            </p>
+          </div>
 
           {/* Job Description */}
           <div className="input-card">
-
             <h2>Job Description</h2>
 
             <textarea
@@ -280,38 +269,36 @@ const removeResume = () => {
             <p className="word-count">
               {jobDescriptionWords} words
             </p>
-
           </div>
-
         </section>
-
 
         {/* Buttons */}
         <div className="button-group">
-
           <button
             className="analyze-button"
             onClick={analyzeCareer}
             disabled={loading || uploadingResume}
           >
-            {loading
-              ? "Analyzing..."
-              : uploadingResume
-              ? "Processing Resume..."
-              : "Analyze Career"}
+            {loading ? (
+              <span className="loading-content">
+                <span className="spinner"></span>
+                Analyzing...
+              </span>
+            ) : uploadingResume ? (
+              "Processing Resume..."
+            ) : (
+              "Analyze Career"
+            )}
           </button>
-
 
           <button
             className="clear-button"
             onClick={clearAnalysis}
-            disabled={loading}
+            disabled={loading || uploadingResume}
           >
             Clear
           </button>
-
         </div>
-
 
         {/* Error */}
         {error && (
@@ -320,22 +307,17 @@ const removeResume = () => {
           </p>
         )}
 
-
         {/* Career Analysis Results */}
         {result && (
           <section
             className="results"
             ref={resultsRef}
           >
-
             <h2>Career Analysis</h2>
-
 
             {/* Match Score */}
             <div className="score-card">
-
               <div>
-
                 <p className="score-label">
                   Resume Match Score
                 </p>
@@ -345,35 +327,25 @@ const removeResume = () => {
                     ? `${result.match_score}%`
                     : "N/A"}
                 </h3>
-
               </div>
-
 
               {result.match_score !== undefined && (
                 <div className="score-bar">
-
                   <div
                     className="score-progress"
                     style={{
                       width: `${result.match_score}%`,
                     }}
                   ></div>
-
                 </div>
               )}
-
             </div>
-
 
             {/* Matching Skills */}
             <div className="result-card">
-
-              <h3>
-                ✓ Matching Skills
-              </h3>
+              <h3>✓ Matching Skills</h3>
 
               <ul>
-
                 {result.matching_skills?.map(
                   (skill, index) => (
                     <li key={index}>
@@ -381,21 +353,14 @@ const removeResume = () => {
                     </li>
                   )
                 )}
-
               </ul>
-
             </div>
-
 
             {/* Missing Skills */}
             <div className="result-card">
-
-              <h3>
-                ⚠ Missing Skills
-              </h3>
+              <h3>⚠ Missing Skills</h3>
 
               <ul>
-
                 {result.missing_skills?.map(
                   (skill, index) => (
                     <li key={index}>
@@ -403,21 +368,14 @@ const removeResume = () => {
                     </li>
                   )
                 )}
-
               </ul>
-
             </div>
-
 
             {/* Resume Improvements */}
             <div className="result-card">
-
-              <h3>
-                📝 Resume Improvements
-              </h3>
+              <h3>📝 Resume Improvements</h3>
 
               <ul>
-
                 {result.resume_improvements?.map(
                   (improvement, index) => (
                     <li key={index}>
@@ -425,21 +383,14 @@ const removeResume = () => {
                     </li>
                   )
                 )}
-
               </ul>
-
             </div>
-
 
             {/* Interview Questions */}
             <div className="result-card">
-
-              <h3>
-                🎯 Interview Questions
-              </h3>
+              <h3>🎯 Interview Questions</h3>
 
               <ul>
-
                 {result.interview_questions?.map(
                   (question, index) => (
                     <li key={index}>
@@ -447,97 +398,61 @@ const removeResume = () => {
                     </li>
                   )
                 )}
-
               </ul>
-
             </div>
-
           </section>
         )}
 
-
         {/* Analysis History */}
         <section className="history">
-
-          <h2>
-            Analysis History
-          </h2>
-
+          <h2>Analysis History</h2>
 
           {historyLoading ? (
-
             <p className="history-message">
               Loading history...
             </p>
-
           ) : history.length === 0 ? (
-
             <p className="history-message">
               No previous analyses yet.
             </p>
-
           ) : (
-
             <div className="history-list">
-
               {history.map((item) => (
-
                 <div
                   className="history-card"
                   key={item._id}
-                  onClick={() =>
-                    viewAnalysis(item)
-                  }
+                  onClick={() => viewAnalysis(item)}
                 >
-
                   <div className="history-header">
-
-                    <h3>
-                      Career Analysis
-                    </h3>
-
+                    <h3>Career Analysis</h3>
 
                     {item.match_score !== undefined && (
                       <span className="history-score">
                         {item.match_score}%
                       </span>
                     )}
-
                   </div>
 
-
                   <p className="history-date">
-
                     {new Date(
                       item.createdAt
                     ).toLocaleString()}
-
                   </p>
 
-
                   <p className="history-preview">
-
                     {item.job_description.length > 120
                       ? `${item.job_description.substring(
                           0,
                           120
                         )}...`
                       : item.job_description}
-
                   </p>
-
                 </div>
-
               ))}
-
             </div>
-
           )}
-
         </section>
-
       </main>
-
     </div>
   );
 }

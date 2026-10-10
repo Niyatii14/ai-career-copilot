@@ -116,8 +116,15 @@ textarea:focus {
 }
 
 .error {
+  max-width: 700px;
+  margin: 20px auto;
+  padding: 14px 18px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
   text-align: center;
-  color: #dc2626;
+  line-height: 1.5;
 }
 
 @media (max-width: 768px) {
@@ -331,4 +338,26 @@ textarea:focus {
 .remove-file:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.loading-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
