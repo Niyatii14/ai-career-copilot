@@ -1,43 +1,52 @@
+
 const mongoose = require("mongoose");
 
 const careerAnalysisSchema = new mongoose.Schema(
     {
+        owner: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+            index: true,
+        },
+
         resume: {
             type: String,
-            required: true
+            required: true,
         },
 
         job_description: {
             type: String,
-            required: true
+            required: true,
         },
+
         match_score: {
             type: Number,
-            required: true
+            required: true,
         },
 
         matching_skills: {
             type: [String],
-            default: []
+            default: [],
         },
 
         missing_skills: {
             type: [String],
-            default: []
+            default: [],
         },
 
         resume_improvements: {
             type: [String],
-            default: []
+            default: [],
         },
 
         interview_questions: {
             type: [String],
-            default: []
-        }
+            default: [],
+        },
     },
     {
-        timestamps: true
+        timestamps: true,
     }
 );
 

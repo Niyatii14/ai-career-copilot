@@ -392,3 +392,40 @@ textarea:focus {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+
+/* Analysis history card buttons */
+.history-view-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.history-view-button:focus-visible,
+.history-delete-button:focus-visible {
+  outline: 2px solid #a18cd1;
+  outline-offset: 3px;
+}
+
+.history-delete-button {
+  margin-top: 12px;
+  padding: 7px 14px;
+  border: 1px solid #e57373;
+  border-radius: 8px;
+  background: transparent;
+  color: #d9534f;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.history-delete-button:hover {
+  background: #d9534f;
+  color: #ffffff;
+}

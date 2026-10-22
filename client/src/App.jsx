@@ -6,6 +6,23 @@ const MAX_RESUME_LENGTH = 15000;
 const MAX_JOB_DESCRIPTION_LENGTH = 12000;
 
 function App() {
+  const [authToken, setAuthToken] = useState(
+    () => sessionStorage.getItem("authToken") || ""
+  );
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem("currentUser") || "null");
+    } catch {
+      return null;
+    }
+  });
+  const [authMode, setAuthMode] = useState("login");
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [verificationOtp, setVerificationOtp] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+
   const [resume, setResume] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [result, setResult] = useState(null);
@@ -48,8 +65,18 @@ function App() {
     try {
       setHistoryLoading(true);
 
+      if (!authToken) {
+        setHistory([]);
+        return;
+      }
+
       const response = await fetch(
-        "http://localhost:5000/api/analyses"
+        "http://localhost:5000/api/analyses",
+        {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        }
       );
 
       if (!response.ok) {
@@ -65,6 +92,220 @@ function App() {
     }
   };
 
+  // Register or log in, then save the session for this browser tab.
+  const handleAuthSubmit = async (event) => {
+    event.preventDefault();
+    if (authLoading) return;
+
+    const cleanEmail = authEmail.trim().toLowerCase();
+    const cleanName = authName.trim();
+
+    if (authMode === "register" && !cleanName) {
+      setError("Please enter your name.");
+      return;
+    }
+    if (!cleanEmail || !authPassword) {
+      setError("Please enter your email and password.");
+      return;
+    }
+    if (authMode === "register" && authPassword.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+
+    try {
+      setAuthLoading(true);
+      setError("");
+
+      if (authMode === "register") {
+        const registerResponse = await fetch(
+          "http://localhost:5000/api/auth/register",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: cleanName,
+              email: cleanEmail,
+              password: authPassword,
+            }),
+          }
+        );
+        const registerData = await registerResponse.json();
+        if (!registerResponse.ok) {
+          throw new Error(registerData.error || registerData.message || "Failed to create account.");
+        }
+
+        setAuthEmail(cleanEmail);
+        setAuthPassword("");
+        setVerificationOtp("");
+        setAuthMode("verify");
+        setError(registerData.message || "We sent a 6-digit verification code to your email.");
+        return;
+      }
+
+      const loginResponse = await fetch(
+        "http://localhost:5000/api/auth/login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: cleanEmail,
+            password: authPassword,
+          }),
+        }
+      );
+      const loginData = await loginResponse.json();
+      if (!loginResponse.ok) {
+        if (loginResponse.status === 403 && loginData.requiresVerification) {
+          setAuthMode("verify");
+          setVerificationOtp("");
+          throw new Error(loginData.error || loginData.message || "Please verify your email first.");
+        }
+        throw new Error(loginData.error || loginData.message || "Failed to log in.");
+      }
+
+      sessionStorage.setItem("authToken", loginData.token);
+      sessionStorage.setItem("currentUser", JSON.stringify(loginData.user));
+      setAuthToken(loginData.token);
+      setCurrentUser(loginData.user);
+      setAuthPassword("");
+      setError("");
+    } catch (authError) {
+      console.error("Authentication error:", authError);
+      setError(authError.message || "Authentication failed. Please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Verify the email using the 6-digit code sent by the server.
+  const handleVerifyEmail = async (event) => {
+    event.preventDefault();
+    if (authLoading) return;
+
+    const cleanEmail = authEmail.trim().toLowerCase();
+    const cleanOtp = verificationOtp.trim();
+    if (!cleanEmail || !/^\d{6}$/.test(cleanOtp)) {
+      setError("Enter the 6-digit code sent to your email.");
+      return;
+    }
+
+    try {
+      setAuthLoading(true);
+      setError("");
+      const response = await fetch("http://localhost:5000/api/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, otp: cleanOtp }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || data.message || "Email verification failed.");
+      }
+
+      setVerificationOtp("");
+      setAuthPassword("");
+      setAuthMode("login");
+      setError(data.message || "Email verified successfully. You can now log in.");
+    } catch (verifyError) {
+      console.error("Email verification error:", verifyError);
+      setError(verifyError.message || "Email verification failed. Please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Request a fresh verification code.
+  const handleResendOtp = async () => {
+    if (authLoading) return;
+    const cleanEmail = authEmail.trim().toLowerCase();
+    if (!cleanEmail) {
+      setError("Enter your email address first.");
+      return;
+    }
+
+    try {
+      setAuthLoading(true);
+      setError("");
+      const response = await fetch("http://localhost:5000/api/auth/resend-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || data.message || "Could not resend the code.");
+      }
+      setError(data.message || "A new verification code has been sent.");
+    } catch (resendError) {
+      console.error("Resend OTP error:", resendError);
+      setError(resendError.message || "Could not resend the code. Please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const logout = () => {
+    sessionStorage.removeItem("authToken");
+    sessionStorage.removeItem("currentUser");
+    setAuthToken("");
+    setCurrentUser(null);
+    setHistory([]);
+    setHistoryLoading(false);
+    setResult(null);
+    setResume("");
+    setJobDescription("");
+    setResumeFile(null);
+    setError("");
+    setAuthMode("login");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // Delete a saved career analysis
+  const deleteAnalysis = async (id) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this analysis?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/analyses/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Failed to delete analysis."
+        );
+      }
+
+      // Remove the deleted item from the history UI
+      setHistory((previousHistory) =>
+        previousHistory.filter((item) => item._id !== id)
+      );
+
+      // Clear the result if it is the deleted analysis
+      setResult((previousResult) =>
+        previousResult?._id === id ? null : previousResult
+      );
+
+      setError("");
+    } catch (error) {
+      console.error("Delete analysis error:", error);
+      setError(error.message || "Failed to delete analysis.");
+    }
+  };
+
+
   // View a previous analysis
   const viewAnalysis = (analysis) => {
     setResult(analysis);
@@ -78,10 +319,15 @@ function App() {
     }, 100);
   };
 
-  // Load history when the application starts
+  // Load only the signed-in user's analysis history.
   useEffect(() => {
-    fetchHistory();
-  }, []);
+    if (authToken) {
+      fetchHistory();
+    } else {
+      setHistory([]);
+      setHistoryLoading(false);
+    }
+  }, [authToken]);
 
   // Upload PDF resume
   const uploadResume = async (file) => {
@@ -233,6 +479,7 @@ function App() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
           },
           body: JSON.stringify({
             resume: cleanResume,
@@ -276,16 +523,168 @@ function App() {
     }
   };
 
+  if (!authToken || !currentUser) {
+    return (
+      <div className="app">
+        <header className="hero">
+          <h1>AI Career Copilot</h1>
+          <p>Sign in to save and access your personal career analyses.</p>
+        </header>
+
+        <main className="container">
+          <section className="input-card" style={{ maxWidth: "480px", margin: "32px auto" }}>
+            <h2>
+              {authMode === "login"
+                ? "Welcome back"
+                : authMode === "register"
+                ? "Create your account"
+                : "Verify your email"}
+            </h2>
+            <p>
+              {authMode === "login"
+                ? "Log in to continue to your career copilot."
+                : authMode === "register"
+                ? "Create an account to keep your analyses private to you."
+                : `Enter the 6-digit code sent to ${authEmail.trim() || "your email address"}. The code expires in 10 minutes.`}
+            </p>
+
+            {authMode === "verify" ? (
+              <form onSubmit={handleVerifyEmail}>
+                <label style={{ display: "block", marginBottom: "14px" }}>
+                  Email
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    autoComplete="email"
+                    required
+                    style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px" }}
+                  />
+                </label>
+
+                <label style={{ display: "block", marginBottom: "18px" }}>
+                  6-digit verification code
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    value={verificationOtp}
+                    onChange={(event) => setVerificationOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    autoComplete="one-time-code"
+                    required
+                    placeholder="123456"
+                    style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px", letterSpacing: "6px" }}
+                  />
+                </label>
+
+                {error && <p className="error" role="status">{error}</p>}
+
+                <button className="analyze-button" type="submit" disabled={authLoading} style={{ width: "100%" }}>
+                  {authLoading ? "Please wait..." : "Verify Email"}
+                </button>
+                <button type="button" className="history-view-button" onClick={handleResendOtp} disabled={authLoading} style={{ display: "block", margin: "16px auto 0" }}>
+                  Resend code
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleAuthSubmit}>
+                {authMode === "register" && (
+                  <label style={{ display: "block", marginBottom: "14px" }}>
+                    Name
+                    <input
+                      type="text"
+                      value={authName}
+                      onChange={(event) => setAuthName(event.target.value)}
+                      autoComplete="name"
+                      required
+                      style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px" }}
+                    />
+                  </label>
+                )}
+
+                <label style={{ display: "block", marginBottom: "14px" }}>
+                  Email
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    autoComplete="email"
+                    required
+                    style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px" }}
+                  />
+                </label>
+
+                <label style={{ display: "block", marginBottom: "18px" }}>
+                  Password
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={(event) => setAuthPassword(event.target.value)}
+                    autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                    minLength={authMode === "register" ? 8 : undefined}
+                    required
+                    style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px" }}
+                  />
+                  {authMode === "register" && <small>Use at least 8 characters.</small>}
+                </label>
+
+                {error && <p className="error" role="alert">{error}</p>}
+
+                <button className="analyze-button" type="submit" disabled={authLoading} style={{ width: "100%" }}>
+                  {authLoading ? "Please wait..." : authMode === "login" ? "Log In" : "Create Account"}
+                </button>
+              </form>
+            )}
+
+            {authMode !== "verify" ? (
+              <p style={{ marginTop: "18px", textAlign: "center" }}>
+                {authMode === "login" ? "Don't have an account? " : "Already have an account? "}
+                <button
+                  type="button"
+                  className="history-view-button"
+                  onClick={() => {
+                    setAuthMode(authMode === "login" ? "register" : "login");
+                    setError("");
+                  }}
+                >
+                  {authMode === "login" ? "Create one" : "Log in"}
+                </button>
+              </p>
+            ) : (
+              <p style={{ marginTop: "18px", textAlign: "center" }}>
+                <button
+                  type="button"
+                  className="history-view-button"
+                  onClick={() => {
+                    setAuthMode("login");
+                    setVerificationOtp("");
+                    setError("");
+                  }}
+                >
+                  Back to login
+                </button>
+              </p>
+            )}
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       {/* Hero Section */}
       <header className="hero">
         <h1>AI Career Copilot</h1>
-
         <p>
           Analyze your resume against a job description
           and discover how to improve your chances.
         </p>
+        <div style={{ marginTop: "14px" }}>
+          <span style={{ marginRight: "12px" }}>Signed in as {currentUser.name}</span>
+          <button type="button" className="clear-button" onClick={logout}>Log Out</button>
+        </div>
       </header>
 
       <main className="container">
@@ -541,6 +940,8 @@ function App() {
           </section>
         )}
 
+        
+        
         {/* Analysis History */}
         <section className="history">
           <h2>Analysis History</h2>
@@ -559,51 +960,54 @@ function App() {
                 <div
                   className="history-card"
                   key={item._id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => viewAnalysis(item)}
-                  onKeyDown={(e) => {
-                    if (
-                      e.key === "Enter" ||
-                      e.key === " "
-                    ) {
-                      e.preventDefault();
-                      viewAnalysis(item);
-                    }
-                  }}
                 >
-                  <div className="history-header">
-                    <h3>Career Analysis</h3>
+                  <button
+                    type="button"
+                    className="history-view-button"
+                    onClick={() => viewAnalysis(item)}
+                  >
+                    <div className="history-header">
+                      <h3>Career Analysis</h3>
 
-                    {typeof item.match_score === "number" && (
-                      <span className="history-score">
-                        {item.match_score}%
-                      </span>
-                    )}
-                  </div>
+                      {typeof item.match_score === "number" && (
+                        <span className="history-score">
+                          {item.match_score}%
+                        </span>
+                      )}
+                    </div>
 
-                  <p className="history-date">
-                    {item.createdAt
-                      ? new Date(
-                          item.createdAt
-                        ).toLocaleString()
-                      : "Date unavailable"}
-                  </p>
+                    <p className="history-date">
+                      {item.createdAt
+                        ? new Date(
+                            item.createdAt
+                          ).toLocaleString()
+                        : "Date unavailable"}
+                    </p>
 
-                  <p className="history-preview">
-                    {(item.job_description || "").length > 120
-                      ? `${item.job_description.substring(
-                          0,
-                          120
-                        )}...`
-                      : item.job_description ||
-                        "No job description available"}
-                  </p>
+                    <p className="history-preview">
+                      {(item.job_description || "").length > 120
+                        ? `${item.job_description.substring(
+                            0,
+                            120
+                          )}...`
+                        : item.job_description ||
+                          "No job description available"}
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="history-delete-button"
+                    onClick={() => deleteAnalysis(item._id)}
+                  >
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>
           )}
         </section>
+
       </main>
     </div>
   );
