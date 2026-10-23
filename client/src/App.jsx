@@ -1,14 +1,103 @@
-
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
+const API = "http://localhost:5000/api";
 const MAX_RESUME_LENGTH = 15000;
 const MAX_JOB_DESCRIPTION_LENGTH = 12000;
 
-function App() {
-  const [authToken, setAuthToken] = useState(
-    () => sessionStorage.getItem("authToken") || ""
+/* ---------- Small UI helpers ---------- */
+const ICONS = {
+  sun: "M12 4V2m0 20v-2m8-8h2M2 12h2m13.66-5.66 1.41-1.41M4.93 19.07l1.41-1.41m0-11.32L4.93 4.93m14.14 14.14-1.41-1.41M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z",
+  moon: "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z",
+  upload: "M12 16V4m0 0L7 9m5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3",
+  file: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 0v5h5",
+  check: "m5 12.5 4.5 4.5L19 7.5",
+  info: "M12 8h.01M11 12h1v5h1m8-5a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+  alert: "M12 8v5m0 3.5h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z",
+  spark: "m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z",
+  logout: "M15 17l5-5-5-5m5 5H9m4 8H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7",
+};
+
+function Icon({ name }) {
+  return (
+    <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={ICONS[name]} />
+    </svg>
   );
+}
+
+function Logo() {
+  return (
+    <span className="logo">
+      <span className="logo-mark"><Icon name="spark" /></span>
+      VocaFit AI
+    </span>
+  );
+}
+
+function ThemeToggle({ theme, onToggle }) {
+  const next = theme === "dark" ? "light" : "dark";
+  return (
+    <button type="button" className="icon-btn" onClick={onToggle}
+      aria-label={`Switch to ${next} mode`} title={`Switch to ${next} mode`}>
+      <Icon name={theme === "dark" ? "sun" : "moon"} />
+    </button>
+  );
+}
+
+// Your app stores every message in one `error` state, so pick a tone from the text.
+function toneOf(message) {
+  if (/sent|verified successfully|success/i.test(message)) return "success";
+  if (/wait|verify your email|enter the 6-digit/i.test(message)) return "info";
+  return "error";
+}
+
+function Notice({ message, children }) {
+  if (!message) return null;
+  const tone = toneOf(message);
+  return (
+    <div className={`notice notice-${tone}`} role={tone === "error" ? "alert" : "status"}>
+      <Icon name={tone === "success" ? "check" : tone === "info" ? "info" : "alert"} />
+      <div style={{ flex: 1 }}>
+        <p>{message}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const tierOf = (score) => (score >= 75 ? "high" : score >= 50 ? "mid" : "low");
+const TIER_TEXT = {
+  high: ["Strong match", "Your resume lines up well with this role. Polish the points below before you apply."],
+  mid: ["Good start", "You have a solid base. Closing the skill gaps below will raise your chances."],
+  low: ["Needs work", "There are real gaps for this role. Focus on the missing skills and improvements below."],
+};
+
+function ScoreRing({ score }) {
+  const value = Math.min(100, Math.max(0, score));
+  const r = 54;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="ring" role="progressbar" aria-label="Resume match score"
+      aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}>
+      <svg width="132" height="132" viewBox="0 0 132 132">
+        <circle className="ring-track" cx="66" cy="66" r={r} fill="none" strokeWidth="12" />
+        <circle className="ring-fill" cx="66" cy="66" r={r} fill="none" strokeWidth="12"
+          strokeDasharray={`${(value / 100) * c} ${c}`} />
+      </svg>
+      <div className="ring-value">{value}%</div>
+    </div>
+  );
+}
+
+function App() {
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved) return saved;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+  const [authToken, setAuthToken] = useState(() => sessionStorage.getItem("authToken") || "");
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       return JSON.parse(sessionStorage.getItem("currentUser") || "null");
@@ -38,59 +127,54 @@ function App() {
   const resultsRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Word counts
-  const resumeWords = resume.trim()
-    ? resume.trim().split(/\s+/).length
-    : 0;
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
-  const jobDescriptionWords = jobDescription.trim()
-    ? jobDescription.trim().split(/\s+/).length
-    : 0;
+  const resumeWords = resume.trim() ? resume.trim().split(/\s+/).length : 0;
+  const jobDescriptionWords = jobDescription.trim() ? jobDescription.trim().split(/\s+/).length : 0;
+  const busy = loading || uploadingResume;
 
-  // Clear current analysis
+  const resetFileInput = () => {
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const clearAnalysis = () => {
     setResume("");
     setJobDescription("");
     setResult(null);
     setError("");
     setResumeFile(null);
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    resetFileInput();
   };
 
-  // Fetch analysis history
   const fetchHistory = async () => {
     try {
       setHistoryLoading(true);
-
       if (!authToken) {
         setHistory([]);
         return;
       }
-
-      const response = await fetch(
-        "http://localhost:5000/api/analyses",
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch analysis history");
-      }
-
-      const data = await response.json();
-      setHistory(data);
-    } catch (error) {
-      console.error("History error:", error);
+      const response = await fetch(`${API}/analyses`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!response.ok) throw new Error("Failed to fetch analysis history");
+      setHistory(await response.json());
+    } catch (err) {
+      console.error("History error:", err);
     } finally {
       setHistoryLoading(false);
     }
   };
+
+  const postJson = (path, body) =>
+    fetch(`${API}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
   // Register or log in, then save the session for this browser tab.
   const handleAuthSubmit = async (event) => {
@@ -100,74 +184,43 @@ function App() {
     const cleanEmail = authEmail.trim().toLowerCase();
     const cleanName = authName.trim();
 
-    if (authMode === "register" && !cleanName) {
-      setError("Please enter your name.");
-      return;
-    }
-    if (!cleanEmail || !authPassword) {
-      setError("Please enter your email and password.");
-      return;
-    }
-    if (authMode === "register" && authPassword.length < 8) {
-      setError("Password must be at least 8 characters long.");
-      return;
-    }
+    if (authMode === "register" && !cleanName) return setError("Please enter your name.");
+    if (!cleanEmail || !authPassword) return setError("Please enter your email and password.");
+    if (authMode === "register" && authPassword.length < 8)
+      return setError("Password must be at least 8 characters long.");
 
     try {
       setAuthLoading(true);
       setError("");
 
       if (authMode === "register") {
-        const registerResponse = await fetch(
-          "http://localhost:5000/api/auth/register",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: cleanName,
-              email: cleanEmail,
-              password: authPassword,
-            }),
-          }
-        );
-        const registerData = await registerResponse.json();
-        if (!registerResponse.ok) {
-          throw new Error(registerData.error || registerData.message || "Failed to create account.");
-        }
+        const res = await postJson("/auth/register", { name: cleanName, email: cleanEmail, password: authPassword });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.message || "Failed to create account.");
 
         setAuthEmail(cleanEmail);
         setAuthPassword("");
         setVerificationOtp("");
         setAuthMode("verify");
-        setError(registerData.message || "We sent a 6-digit verification code to your email.");
+        setError(data.message || "We sent a 6-digit verification code to your email.");
         return;
       }
 
-      const loginResponse = await fetch(
-        "http://localhost:5000/api/auth/login",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: cleanEmail,
-            password: authPassword,
-          }),
-        }
-      );
-      const loginData = await loginResponse.json();
-      if (!loginResponse.ok) {
-        if (loginResponse.status === 403 && loginData.requiresVerification) {
+      const res = await postJson("/auth/login", { email: cleanEmail, password: authPassword });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 403 && data.requiresVerification) {
           setAuthMode("verify");
           setVerificationOtp("");
-          throw new Error(loginData.error || loginData.message || "Please verify your email first.");
+          throw new Error(data.error || data.message || "Please verify your email first.");
         }
-        throw new Error(loginData.error || loginData.message || "Failed to log in.");
+        throw new Error(data.error || data.message || "Failed to log in.");
       }
 
-      sessionStorage.setItem("authToken", loginData.token);
-      sessionStorage.setItem("currentUser", JSON.stringify(loginData.user));
-      setAuthToken(loginData.token);
-      setCurrentUser(loginData.user);
+      sessionStorage.setItem("authToken", data.token);
+      sessionStorage.setItem("currentUser", JSON.stringify(data.user));
+      setAuthToken(data.token);
+      setCurrentUser(data.user);
       setAuthPassword("");
       setError("");
     } catch (authError) {
@@ -178,30 +231,21 @@ function App() {
     }
   };
 
-  // Verify the email using the 6-digit code sent by the server.
   const handleVerifyEmail = async (event) => {
     event.preventDefault();
     if (authLoading) return;
 
     const cleanEmail = authEmail.trim().toLowerCase();
     const cleanOtp = verificationOtp.trim();
-    if (!cleanEmail || !/^\d{6}$/.test(cleanOtp)) {
-      setError("Enter the 6-digit code sent to your email.");
-      return;
-    }
+    if (!cleanEmail || !/^\d{6}$/.test(cleanOtp))
+      return setError("Enter the 6-digit code sent to your email.");
 
     try {
       setAuthLoading(true);
       setError("");
-      const response = await fetch("http://localhost:5000/api/auth/verify-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, otp: cleanOtp }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || data.message || "Email verification failed.");
-      }
+      const res = await postJson("/auth/verify-email", { email: cleanEmail, otp: cleanOtp });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || "Email verification failed.");
 
       setVerificationOtp("");
       setAuthPassword("");
@@ -215,27 +259,17 @@ function App() {
     }
   };
 
-  // Request a fresh verification code.
   const handleResendOtp = async () => {
     if (authLoading) return;
     const cleanEmail = authEmail.trim().toLowerCase();
-    if (!cleanEmail) {
-      setError("Enter your email address first.");
-      return;
-    }
+    if (!cleanEmail) return setError("Enter your email address first.");
 
     try {
       setAuthLoading(true);
       setError("");
-      const response = await fetch("http://localhost:5000/api/auth/resend-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || data.message || "Could not resend the code.");
-      }
+      const res = await postJson("/auth/resend-otp", { email: cleanEmail });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || "Could not resend the code.");
       setError(data.message || "A new verification code has been sent.");
     } catch (resendError) {
       console.error("Resend OTP error:", resendError);
@@ -258,68 +292,37 @@ function App() {
     setResumeFile(null);
     setError("");
     setAuthMode("login");
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    resetFileInput();
   };
 
-  // Delete a saved career analysis
   const deleteAnalysis = async (id) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this analysis?"
-    );
-
-    if (!confirmed) return;
+    if (!window.confirm("Are you sure you want to delete this analysis?")) return;
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/analyses/${id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        }
-      );
-
+      const response = await fetch(`${API}/analyses/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to delete analysis.");
 
-      if (!response.ok) {
-        throw new Error(
-          data.error || "Failed to delete analysis."
-        );
-      }
-
-      // Remove the deleted item from the history UI
-      setHistory((previousHistory) =>
-        previousHistory.filter((item) => item._id !== id)
-      );
-
-      // Clear the result if it is the deleted analysis
-      setResult((previousResult) =>
-        previousResult?._id === id ? null : previousResult
-      );
-
+      setHistory((prev) => prev.filter((item) => item._id !== id));
+      setResult((prev) => (prev?._id === id ? null : prev));
       setError("");
-    } catch (error) {
-      console.error("Delete analysis error:", error);
-      setError(error.message || "Failed to delete analysis.");
+    } catch (err) {
+      console.error("Delete analysis error:", err);
+      setError(err.message || "Failed to delete analysis.");
     }
   };
 
-
-  // View a previous analysis
   const viewAnalysis = (analysis) => {
     setResult(analysis);
     setError("");
-
     setTimeout(() => {
-      resultsRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
   };
 
-  // Load only the signed-in user's analysis history.
   useEffect(() => {
     if (authToken) {
       fetchHistory();
@@ -329,27 +332,17 @@ function App() {
     }
   }, [authToken]);
 
-  // Upload PDF resume
   const uploadResume = async (file) => {
     if (!file) return;
 
     if (file.type !== "application/pdf") {
       setError("Please upload a PDF file.");
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-
+      resetFileInput();
       return;
     }
-
     if (file.size > 5 * 1024 * 1024) {
       setError("PDF must be smaller than 5 MB.");
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-
+      resetFileInput();
       return;
     }
 
@@ -360,654 +353,388 @@ function App() {
       const formData = new FormData();
       formData.append("resume", file);
 
-      const response = await fetch(
-        "http://localhost:5000/api/upload-resume",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      
+const response = await fetch(`${API}/upload-resume`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${authToken}`,
+  },
+  body: formData,
+});
 
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to upload resume.");
 
-      if (!response.ok) {
-        throw new Error(
-          data.error || "Failed to upload resume."
-        );
-      }
-
-      if (typeof data.text !== "string" || !data.text.trim()) {
-        throw new Error(
-          "No readable text was extracted from this PDF."
-        );
-      }
-
-      if (data.text.length > MAX_RESUME_LENGTH) {
-        throw new Error(
-          "Extracted resume exceeds the 15,000-character limit. Please use a shorter resume."
-        );
-      }
+      if (typeof data.text !== "string" || !data.text.trim())
+        throw new Error("No readable text was extracted from this PDF.");
+      if (data.text.length > MAX_RESUME_LENGTH)
+        throw new Error("Extracted resume exceeds the 15,000-character limit. Please use a shorter resume.");
 
       setResumeFile(file);
       setResume(data.text);
       setResult(null);
-    } catch (error) {
-      console.error("Resume upload error:", error);
-
-      setError(
-        error.message || "Failed to upload resume."
-      );
-
+    } catch (err) {
+      console.error("Resume upload error:", err);
+      setError(err.message || "Failed to upload resume.");
       setResumeFile(null);
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      resetFileInput();
     } finally {
       setUploadingResume(false);
     }
   };
 
-  // Remove uploaded resume
   const removeResume = () => {
     setResumeFile(null);
     setResume("");
     setResult(null);
     setError("");
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    resetFileInput();
   };
 
-  // Analyze career
   const analyzeCareer = async () => {
-    if (loading || uploadingResume) return;
+    if (busy) return;
 
     const cleanResume = resume.trim();
-    const cleanJobDescription = jobDescription.trim();
+    const cleanJob = jobDescription.trim();
 
-    // Required fields
-    if (!cleanResume || !cleanJobDescription) {
-      setError(
-        "Please enter both your resume and job description."
-      );
-      return;
-    }
-
-    // Minimum lengths
-    if (cleanResume.length < 50) {
-      setError(
-        "Your resume is too short. Please provide at least 50 characters."
-      );
-      return;
-    }
-
-    if (cleanJobDescription.length < 50) {
-      setError(
-        "The job description is too short. Please provide at least 50 characters."
-      );
-      return;
-    }
-
-    // Maximum lengths
-    if (cleanResume.length > MAX_RESUME_LENGTH) {
-      setError(
-        "Resume exceeds the 15,000-character limit."
-      );
-      return;
-    }
-
-    if (
-      cleanJobDescription.length >
-      MAX_JOB_DESCRIPTION_LENGTH
-    ) {
-      setError(
-        "Job description exceeds the 12,000-character limit."
-      );
-      return;
-    }
+    if (!cleanResume || !cleanJob) return setError("Please enter both your resume and job description.");
+    if (cleanResume.length < 50) return setError("Your resume is too short. Please provide at least 50 characters.");
+    if (cleanJob.length < 50) return setError("The job description is too short. Please provide at least 50 characters.");
+    if (cleanResume.length > MAX_RESUME_LENGTH) return setError("Resume exceeds the 15,000-character limit.");
+    if (cleanJob.length > MAX_JOB_DESCRIPTION_LENGTH) return setError("Job description exceeds the 12,000-character limit.");
 
     try {
       setLoading(true);
       setError("");
       setResult(null);
 
-      const response = await fetch(
-        "http://localhost:5000/api/analyze-career",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({
-            resume: cleanResume,
-            job_description: cleanJobDescription,
-          }),
-        }
-      );
+      const response = await fetch(`${API}/analyze-career`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ resume: cleanResume, job_description: cleanJob }),
+      });
 
       if (!response.ok) {
         let message = "Failed to analyze career.";
-
         try {
           const errorData = await response.json();
-
-          if (typeof errorData.detail === "string") {
-            message = errorData.detail;
-          } else if (typeof errorData.error === "string") {
-            message = errorData.error;
-          }
+          if (typeof errorData.detail === "string") message = errorData.detail;
+          else if (typeof errorData.error === "string") message = errorData.error;
         } catch {
           // Keep the default error message.
         }
-
         throw new Error(message);
       }
 
-      const data = await response.json();
-
-      setResult(data);
-
-      // Refresh history without delaying the result
+      setResult(await response.json());
       void fetchHistory();
-    } catch (error) {
-      console.error("Analysis error:", error);
-
+    } catch (err) {
+      console.error("Analysis error:", err);
       setError(
-        "Unable to analyze your resume right now. Please check that the backend and AI service are running, then try again."
+        "We couldn't analyze your resume right now. Check that the backend and AI service are running, then try again."
       );
     } finally {
       setLoading(false);
     }
   };
 
+  /* ---------- Login / Register / Verify ---------- */
   if (!authToken || !currentUser) {
-    return (
-      <div className="app">
-        <header className="hero">
-          <h1>AI Career Copilot</h1>
-          <p>Sign in to save and access your personal career analyses.</p>
-        </header>
+    const titles = { login: "Welcome back", register: "Create your account", verify: "Verify your email" };
+    const subs = {
+      login: "Log in to see your saved career reports.",
+      register: "Your reports stay private and only you can see them.",
+      verify: `Enter the 6-digit code we sent to ${authEmail.trim() || "your email"}. It expires in 10 minutes.`,
+    };
 
-        <main className="container">
-          <section className="input-card" style={{ maxWidth: "480px", margin: "32px auto" }}>
-            <h2>
-              {authMode === "login"
-                ? "Welcome back"
-                : authMode === "register"
-                ? "Create your account"
-                : "Verify your email"}
-            </h2>
-            <p>
-              {authMode === "login"
-                ? "Log in to continue to your career copilot."
-                : authMode === "register"
-                ? "Create an account to keep your analyses private to you."
-                : `Enter the 6-digit code sent to ${authEmail.trim() || "your email address"}. The code expires in 10 minutes.`}
+    return (
+      <div className="auth">
+        <aside className="auth-brand">
+          <Logo />
+          <div>
+            <h1>Find out how well your resume fits the job.</h1>
+            <p className="lead">
+              Get a clear report with your match score, missing skills, and interview questions to practice.
             </p>
+            <ol className="steps">
+              <li><b>1</b>Upload your resume or paste it in</li>
+              <li><b>2</b>Paste the job description</li>
+              <li><b>3</b>Get your report in seconds</li>
+            </ol>
+          </div>
+          <span />
+        </aside>
+
+        <main className="auth-panel">
+          <div className="theme-slot"><ThemeToggle theme={theme} onToggle={toggleTheme} /></div>
+
+          <section className="auth-card">
+            <h2>{titles[authMode]}</h2>
+            <p className="sub">{subs[authMode]}</p>
+
+            <Notice message={error} />
 
             {authMode === "verify" ? (
               <form onSubmit={handleVerifyEmail}>
-                <label style={{ display: "block", marginBottom: "14px" }}>
-                  Email
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={(event) => setAuthEmail(event.target.value)}
-                    autoComplete="email"
-                    required
-                    style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px" }}
-                  />
+                <label className="field">
+                  <span>Email</span>
+                  <input className="input" type="email" value={authEmail} autoComplete="email" required
+                    onChange={(e) => setAuthEmail(e.target.value)} />
                 </label>
-
-                <label style={{ display: "block", marginBottom: "18px" }}>
-                  6-digit verification code
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    value={verificationOtp}
-                    onChange={(event) => setVerificationOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                    autoComplete="one-time-code"
-                    required
-                    placeholder="123456"
-                    style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px", letterSpacing: "6px" }}
-                  />
+                <label className="field">
+                  <span>6-digit code</span>
+                  <input className="input otp" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6}
+                    value={verificationOtp} autoComplete="one-time-code" required placeholder="000000"
+                    onChange={(e) => setVerificationOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </label>
-
-                {error && <p className="error" role="status">{error}</p>}
-
-                <button className="analyze-button" type="submit" disabled={authLoading} style={{ width: "100%" }}>
-                  {authLoading ? "Please wait..." : "Verify Email"}
+                <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={authLoading}>
+                  {authLoading ? "Please wait..." : "Verify email"}
                 </button>
-                <button type="button" className="history-view-button" onClick={handleResendOtp} disabled={authLoading} style={{ display: "block", margin: "16px auto 0" }}>
-                  Resend code
-                </button>
+                <p className="resend">
+                  Didn't get a code?{" "}
+                  <button type="button" className="link-button" onClick={handleResendOtp} disabled={authLoading}>
+                    Resend code
+                  </button>
+                </p>
               </form>
             ) : (
               <form onSubmit={handleAuthSubmit}>
                 {authMode === "register" && (
-                  <label style={{ display: "block", marginBottom: "14px" }}>
-                    Name
-                    <input
-                      type="text"
-                      value={authName}
-                      onChange={(event) => setAuthName(event.target.value)}
-                      autoComplete="name"
-                      required
-                      style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px" }}
-                    />
+                  <label className="field">
+                    <span>Name</span>
+                    <input className="input" type="text" value={authName} autoComplete="name" required
+                      placeholder="Your full name" onChange={(e) => setAuthName(e.target.value)} />
                   </label>
                 )}
-
-                <label style={{ display: "block", marginBottom: "14px" }}>
-                  Email
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={(event) => setAuthEmail(event.target.value)}
-                    autoComplete="email"
-                    required
-                    style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px" }}
-                  />
+                <label className="field">
+                  <span>Email</span>
+                  <input className="input" type="email" value={authEmail} autoComplete="email" required
+                    placeholder="you@example.com" onChange={(e) => setAuthEmail(e.target.value)} />
                 </label>
-
-                <label style={{ display: "block", marginBottom: "18px" }}>
-                  Password
-                  <input
-                    type="password"
-                    value={authPassword}
-                    onChange={(event) => setAuthPassword(event.target.value)}
+                <label className="field">
+                  <span>Password</span>
+                  <input className="input" type="password" value={authPassword} required
                     autoComplete={authMode === "login" ? "current-password" : "new-password"}
                     minLength={authMode === "register" ? 8 : undefined}
-                    required
-                    style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: "6px", padding: "12px" }}
-                  />
+                    onChange={(e) => setAuthPassword(e.target.value)} />
                   {authMode === "register" && <small>Use at least 8 characters.</small>}
                 </label>
-
-                {error && <p className="error" role="alert">{error}</p>}
-
-                <button className="analyze-button" type="submit" disabled={authLoading} style={{ width: "100%" }}>
-                  {authLoading ? "Please wait..." : authMode === "login" ? "Log In" : "Create Account"}
+                <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={authLoading}>
+                  {authLoading ? "Please wait..." : authMode === "login" ? "Log in" : "Create account"}
                 </button>
               </form>
             )}
 
-            {authMode !== "verify" ? (
-              <p style={{ marginTop: "18px", textAlign: "center" }}>
-                {authMode === "login" ? "Don't have an account? " : "Already have an account? "}
-                <button
-                  type="button"
-                  className="history-view-button"
-                  onClick={() => {
-                    setAuthMode(authMode === "login" ? "register" : "login");
-                    setError("");
-                  }}
-                >
-                  {authMode === "login" ? "Create one" : "Log in"}
+            <p className="auth-switch">
+              {authMode === "verify" ? (
+                <button type="button" className="link-button"
+                  onClick={() => { setAuthMode("login"); setVerificationOtp(""); setError(""); }}>
+                  Back to log in
                 </button>
-              </p>
-            ) : (
-              <p style={{ marginTop: "18px", textAlign: "center" }}>
-                <button
-                  type="button"
-                  className="history-view-button"
-                  onClick={() => {
-                    setAuthMode("login");
-                    setVerificationOtp("");
-                    setError("");
-                  }}
-                >
-                  Back to login
-                </button>
-              </p>
-            )}
+              ) : (
+                <>
+                  {authMode === "login" ? "New here? " : "Already have an account? "}
+                  <button type="button" className="link-button"
+                    onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setError(""); }}>
+                    {authMode === "login" ? "Create an account" : "Log in"}
+                  </button>
+                </>
+              )}
+            </p>
           </section>
         </main>
       </div>
     );
   }
 
+  /* ---------- Dashboard ---------- */
+  const firstName = (currentUser.name || "there").split(" ")[0];
+  const hasScore = result && typeof result.match_score === "number";
+  const tier = hasScore ? tierOf(result.match_score) : "mid";
+
   return (
-    <div className="app">
-      {/* Hero Section */}
-      <header className="hero">
-        <h1>AI Career Copilot</h1>
-        <p>
-          Analyze your resume against a job description
-          and discover how to improve your chances.
-        </p>
-        <div style={{ marginTop: "14px" }}>
-          <span style={{ marginRight: "12px" }}>Signed in as {currentUser.name}</span>
-          <button type="button" className="clear-button" onClick={logout}>Log Out</button>
+    <div>
+      <header className="topbar">
+        <Logo />
+        <div className="topbar-right">
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <div className="user-chip">
+            <span className="avatar">{firstName.charAt(0).toUpperCase()}</span>
+            <span className="name">{currentUser.name}</span>
+          </div>
+          <button type="button" className="btn btn-ghost" onClick={logout}>
+            <Icon name="logout" />Log out
+          </button>
         </div>
       </header>
 
-      <main className="container">
-        {/* Input Section */}
-        <section className="input-section">
-          {/* Resume */}
-          <div className="input-card">
-            <h2>Your Resume</h2>
+      <main className="page">
+        <section className="intro">
+          <h1>Hi {firstName}, let's check your fit for a job.</h1>
+          <p>Add your resume and the job description. You'll get your match score, the skills to work on, and questions to practice.</p>
+        </section>
 
-            <label className="upload-label">
-              {uploadingResume
-                ? "Processing PDF..."
-                : "Upload Resume PDF"}
+        <section className="panels">
+          <div className="panel">
+            <h2>Your resume</h2>
+            <p className="hint">Upload a PDF or paste the text.</p>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,application/pdf"
-                disabled={uploadingResume || loading}
-                onChange={(e) => {
-                  uploadResume(e.target.files?.[0]);
-                }}
-              />
+            <label className="dropzone">
+              <span className="icon-wrap"><Icon name="upload" /></span>
+              <span>
+                <strong>{uploadingResume ? "Reading your PDF..." : "Upload resume PDF"}</strong>
+                <span>PDF up to 5 MB</span>
+              </span>
+              <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" disabled={busy}
+                onChange={(e) => uploadResume(e.target.files?.[0])} />
             </label>
 
             {resumeFile && (
-              <div className="file-info">
+              <div className="file-chip">
                 <div>
-                  <strong>
-                    📄 {resumeFile.name}
-                  </strong>
-
-                  <p>
-                    {(resumeFile.size / 1024).toFixed(1)} KB
-                  </p>
+                  <strong>{resumeFile.name}</strong>
+                  <small>{(resumeFile.size / 1024).toFixed(1)} KB</small>
                 </div>
-
-                <button
-                  type="button"
-                  className="remove-file"
-                  onClick={removeResume}
-                  disabled={uploadingResume || loading}
-                >
+                <button type="button" className="btn btn-danger" onClick={removeResume} disabled={busy}>
                   Remove
                 </button>
               </div>
             )}
 
-            <p className="or-text">
-              or paste your resume below
-            </p>
+            <div className="divider">or paste your resume</div>
 
-            <textarea
-              placeholder="Paste your resume here..."
-              value={resume}
-              maxLength={MAX_RESUME_LENGTH}
-              disabled={uploadingResume || loading}
-              onChange={(e) => {
-                setResume(e.target.value);
-                setResumeFile(null);
-                setResult(null);
-                setError("");
-              }}
-            />
-
-            <p className="word-count">
-              {resumeWords} words · {resume.length}/
-              {MAX_RESUME_LENGTH} characters
-            </p>
+            <textarea className="textarea" placeholder="Paste your resume here..." value={resume}
+              maxLength={MAX_RESUME_LENGTH} disabled={busy}
+              onChange={(e) => { setResume(e.target.value); setResumeFile(null); setResult(null); setError(""); }} />
+            <p className="counter">{resumeWords} words · {resume.length.toLocaleString()} / {MAX_RESUME_LENGTH.toLocaleString()}</p>
           </div>
 
-          {/* Job Description */}
-          <div className="input-card">
-            <h2>Job Description</h2>
+          <div className="panel">
+            <h2>Job description</h2>
+            <p className="hint">Paste the full job post you're applying for.</p>
 
-            <textarea
-              placeholder="Paste the job description here..."
-              value={jobDescription}
-              maxLength={MAX_JOB_DESCRIPTION_LENGTH}
-              disabled={loading || uploadingResume}
-              onChange={(e) => {
-                setJobDescription(e.target.value);
-                setResult(null);
-                setError("");
-              }}
-            />
-
-            <p className="word-count">
-              {jobDescriptionWords} words ·{" "}
-              {jobDescription.length}/
-              {MAX_JOB_DESCRIPTION_LENGTH} characters
-            </p>
+            <textarea className="textarea" style={{ minHeight: 330 }} placeholder="Paste the job description here..."
+              value={jobDescription} maxLength={MAX_JOB_DESCRIPTION_LENGTH} disabled={busy}
+              onChange={(e) => { setJobDescription(e.target.value); setResult(null); setError(""); }} />
+            <p className="counter">{jobDescriptionWords} words · {jobDescription.length.toLocaleString()} / {MAX_JOB_DESCRIPTION_LENGTH.toLocaleString()}</p>
           </div>
         </section>
 
-        {/* Action Buttons */}
-        <div className="button-group">
-          <button
-            type="button"
-            className="analyze-button"
-            onClick={analyzeCareer}
-            disabled={loading || uploadingResume}
-          >
-            {loading ? (
-              <span className="loading-content">
-                <span className="spinner"></span>
-                Analyzing...
-              </span>
-            ) : uploadingResume ? (
-              "Processing Resume..."
-            ) : (
-              "Analyze Career"
-            )}
+        <div className="actions">
+          <button type="button" className="btn btn-primary btn-lg" onClick={analyzeCareer} disabled={busy}>
+            {loading ? (<><span className="spinner" />Analyzing...</>)
+              : uploadingResume ? "Reading resume..."
+              : (<><Icon name="spark" />Analyze my career</>)}
           </button>
-
-          <button
-            type="button"
-            className="clear-button"
-            onClick={clearAnalysis}
-            disabled={loading || uploadingResume}
-          >
+          <button type="button" className="btn btn-secondary btn-lg" onClick={clearAnalysis} disabled={busy}>
             Clear
           </button>
         </div>
 
-        {/* Error and Retry */}
-        {error && (
-          <div className="error-container">
-            <p className="error">{error}</p>
+        <div className="status-wrap">
+          <Notice message={error}>
+            {resume.trim() && jobDescription.trim() && !busy && toneOf(error) === "error" && (
+              <div className="notice-actions">
+                <button type="button" className="btn btn-secondary" onClick={analyzeCareer}>Try again</button>
+              </div>
+            )}
+          </Notice>
+        </div>
 
-            {resume.trim() &&
-              jobDescription.trim() &&
-              !loading &&
-              !uploadingResume && (
-                <button
-                  type="button"
-                  className="retry-button"
-                  onClick={analyzeCareer}
-                  disabled={loading || uploadingResume}
-                >
-                  Retry Analysis
-                </button>
-              )}
-          </div>
-        )}
-
-        {/* Career Analysis Results */}
         {result && (
-          <section
-            className="results"
-            ref={resultsRef}
-          >
-            <h2>Career Analysis</h2>
-
-            {/* Match Score */}
-            <div className="score-card">
-              <div>
-                <p className="score-label">
-                  Resume Match Score
-                </p>
-
-                <h3>
-                  {typeof result.match_score === "number"
-                    ? `${result.match_score}%`
-                    : "N/A"}
-                </h3>
+          <section ref={resultsRef}>
+            <h2 className="section-title">Your career report</h2>
+            <div className="report">
+              <div className={`score-card tier-${tier}`}>
+                {hasScore && <ScoreRing score={result.match_score} />}
+                <div>
+                  <h3>{hasScore ? TIER_TEXT[tier][0] : "Score not available"}</h3>
+                  <p>{hasScore ? TIER_TEXT[tier][1] : "We couldn't calculate a match score, but the details are below."}</p>
+                </div>
               </div>
 
-              {typeof result.match_score === "number" && (
-                <div
-                  className="score-bar"
-                  role="progressbar"
-                  aria-label="Resume match score"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.min(
-                    100,
-                    Math.max(0, result.match_score)
-                  )}
-                >
-                  <div
-                    className="score-progress"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        Math.max(0, result.match_score)
-                      )}%`,
-                    }}
-                  ></div>
+              <div className="two-col">
+                <div className="result-card">
+                  <h3>Skills you already have</h3>
+                  <p className="hint">These match what the job asks for.</p>
+                  <div className="chips">
+                    {result.matching_skills?.length
+                      ? result.matching_skills.map((s, i) => <span key={`${s}-${i}`} className="chip chip-ok">{s}</span>)
+                      : <p className="empty-line">No matching skills found.</p>}
+                  </div>
                 </div>
-              )}
-            </div>
+                <div className="result-card">
+                  <h3>Skills to add</h3>
+                  <p className="hint">The job asks for these and your resume doesn't show them yet.</p>
+                  <div className="chips">
+                    {result.missing_skills?.length
+                      ? result.missing_skills.map((s, i) => <span key={`${s}-${i}`} className="chip chip-warn">{s}</span>)
+                      : <p className="empty-line">Nothing missing. Nice work.</p>}
+                  </div>
+                </div>
+              </div>
 
-            {/* Matching Skills */}
-            <div className="result-card">
-              <h3>✓ Matching Skills</h3>
+              <div className="result-card">
+                <h3>How to improve your resume</h3>
+                <p className="hint">Small changes that make a big difference.</p>
+                <ul className="check-list">
+                  {result.resume_improvements?.map((item, i) => (
+                    <li key={`${item}-${i}`}><Icon name="check" /><span>{item}</span></li>
+                  ))}
+                </ul>
+              </div>
 
-              <ul>
-                {result.matching_skills?.map(
-                  (skill, index) => (
-                    <li key={`${skill}-${index}`}>
-                      {skill}
-                    </li>
-                  )
-                )}
-              </ul>
-            </div>
-
-            {/* Missing Skills */}
-            <div className="result-card">
-              <h3>⚠ Missing Skills</h3>
-
-              <ul>
-                {result.missing_skills?.map(
-                  (skill, index) => (
-                    <li key={`${skill}-${index}`}>
-                      {skill}
-                    </li>
-                  )
-                )}
-              </ul>
-            </div>
-
-            {/* Resume Improvements */}
-            <div className="result-card">
-              <h3>📝 Resume Improvements</h3>
-
-              <ul>
-                {result.resume_improvements?.map(
-                  (improvement, index) => (
-                    <li key={`${improvement}-${index}`}>
-                      {improvement}
-                    </li>
-                  )
-                )}
-              </ul>
-            </div>
-
-            {/* Interview Questions */}
-            <div className="result-card">
-              <h3>🎯 Interview Questions</h3>
-
-              <ul>
-                {result.interview_questions?.map(
-                  (question, index) => (
-                    <li key={`${question}-${index}`}>
-                      {question}
-                    </li>
-                  )
-                )}
-              </ul>
+              <div className="result-card">
+                <h3>Interview questions to practice</h3>
+                <p className="hint">Prepare an answer for each before your interview.</p>
+                <ul className="q-list">
+                  {result.interview_questions?.map((q, i) => <li key={`${q}-${i}`}>{q}</li>)}
+                </ul>
+              </div>
             </div>
           </section>
         )}
 
-        
-        
-        {/* Analysis History */}
-        <section className="history">
-          <h2>Analysis History</h2>
-
+        <section>
+          <h2 className="section-title">Your past reports</h2>
           {historyLoading ? (
-            <p className="history-message">
-              Loading history...
-            </p>
+            <p className="empty-line">Loading your reports...</p>
           ) : history.length === 0 ? (
-            <p className="history-message">
-              No previous analyses yet.
-            </p>
+            <div className="empty-state">
+              <strong>No reports yet</strong>
+              Run your first analysis above and it will be saved here.
+            </div>
           ) : (
-            <div className="history-list">
-              {history.map((item) => (
-                <div
-                  className="history-card"
-                  key={item._id}
-                >
-                  <button
-                    type="button"
-                    className="history-view-button"
-                    onClick={() => viewAnalysis(item)}
-                  >
-                    <div className="history-header">
-                      <h3>Career Analysis</h3>
-
-                      {typeof item.match_score === "number" && (
-                        <span className="history-score">
-                          {item.match_score}%
+            <div className="history-grid">
+              {history.map((item) => {
+                const scored = typeof item.match_score === "number";
+                return (
+                  <article className="history-card" key={item._id}>
+                    <button type="button" className="history-view" onClick={() => viewAnalysis(item)}>
+                      <div className="history-top">
+                        <span className="history-date">
+                          {item.createdAt ? new Date(item.createdAt).toLocaleString() : "Date unavailable"}
                         </span>
-                      )}
+                        {scored && (
+                          <span className={`score-pill tier-${tierOf(item.match_score)}`}>{item.match_score}%</span>
+                        )}
+                      </div>
+                      <p className="history-preview">
+                        {item.job_description || "No job description available"}
+                      </p>
+                    </button>
+                    <div className="history-foot">
+                      <span className="view-label">View report</span>
+                      <button type="button" className="btn btn-danger" onClick={() => deleteAnalysis(item._id)}>
+                        Delete
+                      </button>
                     </div>
-
-                    <p className="history-date">
-                      {item.createdAt
-                        ? new Date(
-                            item.createdAt
-                          ).toLocaleString()
-                        : "Date unavailable"}
-                    </p>
-
-                    <p className="history-preview">
-                      {(item.job_description || "").length > 120
-                        ? `${item.job_description.substring(
-                            0,
-                            120
-                          )}...`
-                        : item.job_description ||
-                          "No job description available"}
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="history-delete-button"
-                    onClick={() => deleteAnalysis(item._id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
-
       </main>
     </div>
   );

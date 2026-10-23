@@ -187,6 +187,7 @@ app.get(
 // This endpoint extracts text but does not save an analysis.
 app.post(
     "/api/upload-resume",
+    authMiddleware,
     (req, res, next) => {
         upload.single("resume")(req, res, (error) => {
             if (error) {
@@ -310,15 +311,13 @@ mongoose
     .connect(process.env.MONGO_URI)
     .then(() => {
         console.log("MongoDB connected successfully");
+
+        app.listen(PORT, () => {
+            console.log(`Server running on http://localhost:${PORT}`);
+        });
     })
     .catch((error) => {
-        console.error(
-            "MongoDB connection failed:",
-            error.message
-        );
+        console.error("MongoDB connection failed:", error.message);
+        process.exit(1);
     });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});

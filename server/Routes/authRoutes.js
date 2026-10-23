@@ -67,7 +67,12 @@ router.post("/register", async (req, res) => {
     }
 
     const existingUser = await User.findOne({ email: normalizedEmail })
-    .select("+emailVerificationOtpHash +emailVerificationOtpExpiresAt");
+    .select(
+    "+emailVerificationOtpHash " +
+    "+emailVerificationOtpExpiresAt " +
+    "+emailVerificationLastSentAt " +
+    "+emailVerificationAttempts"
+);
 
     if (existingUser) {
         if (existingUser.emailVerified) {
