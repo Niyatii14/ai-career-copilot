@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
-const API = "http://localhost:5000/api";
+const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const MAX_RESUME_LENGTH = 15000;
 const MAX_JOB_DESCRIPTION_LENGTH = 12000;
 
