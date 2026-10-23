@@ -13,7 +13,7 @@ const authMiddleware = require("./middleware/authMiddleware");
 const CareerAnalysis = require("./models/CareerAnalysis");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
@@ -100,7 +100,7 @@ app.post(
 
             // Call the FastAPI AI service
             const response = await axios.post(
-                "http://127.0.0.1:8000/analyze-career",
+                `${process.env.AI_SERVICE_URL || "http://127.0.0.1:8000"}/analyze-career`,
                 {
                     resume: cleanResume,
                     job_description: cleanJobDescription,
